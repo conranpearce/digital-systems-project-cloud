@@ -1,4 +1,4 @@
-import json
+import json 
 import urllib3
 
 # Google cloud function to turn a TP-Link bulb's colour relating to the current carbon intensity of the National Grid
@@ -10,10 +10,11 @@ def getRequest(url):
     return resp.status
 
 # Get the TP-Link token using a UUID
-def getToken(uuid):
+def getToken(username, password, uuid):
     http = urllib3.PoolManager()
     url = "https://wap.tplinkcloud.com"
-    data = "{\n \"method\": \"login\",\n \"params\": {\n \"appType\": \"Kasa_Android\",\n \"cloudUserName\": \"***\",\n \"cloudPassword\": \"***\",\n \"terminalUUID\": \"% (uuid)\"\n }\n}";
+
+    data = "{\n \"method\": \"login\",\n \"params\": {\n \"appType\": \"Kasa_Android\",\n \"cloudUserName\": \"%s\",\n \"cloudPassword\": \"%s\",\n \"terminalUUID\": \"%s\"\n }\n}" % (username, password, uuid)
 
     r = http.request(
         'POST', 
@@ -27,14 +28,11 @@ def getToken(uuid):
     return resp['result']['token']
 
 # Set the TP-Link bulb colour through a POST request
-def setBulbColour(colour):    
-    uuid = getUUID()
-    tokenGenerated = getToken(uuid)
-    
+def setBulbColour(colour, tokenGenerated, deviceId):    
     http = urllib3.PoolManager()
     url = "https://wap.tplinkcloud.com"
 
-    data =  "{\n \"method\": \"passthrough\",\n \"params\": {\n \"token\": \"%s\",\n \"deviceId\": \"***\",\n\t\t\"requestData\": \"{\\\"smartlife.iot.smartbulb.lightingservice\\\":{\\\"transition_light_state\\\":{\\\"brightness\\\":100,\\\"ignore_default\\\":0,\\\"mode\\\":\\\"normal\\\",\\\"hue\\\":%s,\\\"saturation\\\":75,\\\"color_temp\\\":0, \\\"on_off\\\":1,\\\"transition_period\\\":2500}}}\"\n }\n}\n\n" % (tokenGenerated, colour)
+    data =  "{\n \"method\": \"passthrough\",\n \"params\": {\n \"token\": \"%s\",\n \"deviceId\": \"%s\",\n\t\t\"requestData\": \"{\\\"smartlife.iot.smartbulb.lightingservice\\\":{\\\"transition_light_state\\\":{\\\"brightness\\\":100,\\\"ignore_default\\\":0,\\\"mode\\\":\\\"normal\\\",\\\"hue\\\":%s,\\\"saturation\\\":75,\\\"color_temp\\\":0, \\\"on_off\\\":1,\\\"transition_period\\\":2500}}}\"\n }\n}\n\n" % (tokenGenerated, deviceId, colour)
 
     r = http.request(
         'POST', 
@@ -60,9 +58,9 @@ def getBulbColour(currentCarbonIntensity):
         hue = 30
     elif currentCarbonIntensity == 'very high':
         hue = 1
-    
-    setBulbColour(hue)
 
+    return hue
+    
 # Get the current carbon intensity, provided by the National Grid API
 def getCarbonIntensity():
     http = urllib3.PoolManager()
@@ -72,9 +70,10 @@ def getCarbonIntensity():
     resp = json.loads(r.data.decode('utf-8'))
 
     carbonIndex = resp["data"][0]["intensity"]["index"]
-    getBulbColour(carbonIndex)
 
-# Get a UUID
+    return carbonIndex
+
+# Get UUID to pass into token    
 def getUUID():
     uuid4 = getRequest("https://www.uuidtools.com/api/generate/v1/");
     return uuid4
@@ -82,10 +81,21 @@ def getUUID():
 # Main function, invoked by the cloud function
 def main(request):
     request_json = request.get_json()
+    if request_json:
+        deviceId = request_json['deviceId']
+        username = request_json['username']
+        password = request_json['password']
+
+        carbonIndex = getCarbonIntensity()
+        bulbColour = getBulbColour(carbonIndex)
+        uuid = getUUID()
+        token = getToken(username, password, uuid)
+        setBulbColour(bulbColour, token, deviceId)
+
     if request.args and 'message' in request.args:
         return request.args.get('message')
     elif request_json and 'message' in request_json:
         return request_json['message']
-    else:
-        getCarbonIntensity()
+    else
+        return "error"
     

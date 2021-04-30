@@ -1,4 +1,4 @@
-# Digital Systems Project - Cloud code
+# Digital Systems Project - Cloud Code
 
 Python files relating to cloud services used in the [Digital Systems Project](https://github.com/conranpearce/digital-systems-project). 
 
